@@ -4,15 +4,13 @@ use embedded_graphics::{
         MonoTextStyle, MonoTextStyleBuilder,
         ascii::{FONT_5X7, FONT_8X13_BOLD},
     },
-    pixelcolor::{BinaryColor, Rgb565},
+    pixelcolor::{BinaryColor, Gray2, Gray4, Rgb565},
     prelude::*,
     primitives::Rectangle,
     text::{Alignment, Text},
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 use tinybmp::Bmp;
-
-const DISABLED_OPACITY: f32 = 0.33;
 
 // Preset dimensions
 
@@ -30,51 +28,53 @@ const CONSOLE: Point = Point::new(125, 43);
 
 // Preset rects
 
+const CHANNEL_MASK_SIZE: Size = Size::new(12, 12);
 const TONE_MASK_SIZE: Size = Size::new(6, 9);
 const NOISE_MASK_SIZE: Size = Size::new(8, 9);
 
+const METER_MASK_SIZE: Size = Size::new(12, 76);
 const METER_SIZE: Size = Size::new(10, 64);
-const A_RECTS: [Rectangle; 3] = [
-    Rectangle::new(Point::new(45, 67), TONE_MASK_SIZE),
-    Rectangle::new(Point::new(45, 67), TONE_MASK_SIZE),
-    Rectangle::new(Point::new(53, 67), NOISE_MASK_SIZE),
-];
 
-//const CONSOLE_TEXT_STYLE: MonoTextStyle<'a, C> = (
-
-//)
+const A_MASKS: ChannelUIMasks = ChannelUIMasks {
+    channel: Rectangle::new(Point::new(32, 66), CHANNEL_MASK_SIZE),
+    tone: Rectangle::new(Point::new(45, 67), TONE_MASK_SIZE),
+    noise: Rectangle::new(Point::new(53, 67), NOISE_MASK_SIZE),
+    meter: Rectangle::new(Point::new(38, 87), METER_MASK_SIZE),
+};
 
 // Masks
 struct ChannelUIMasks {
     channel: Rectangle,
     tone: Rectangle,
     noise: Rectangle,
+    meter: Rectangle,
 }
 
 enum ChannelUIElement {
     EntireChannel,
     ToneGenerator,
     NoiseGenerator,
+    Meter,
 }
 
 struct ChannelUI {
     pub masks: ChannelUIMasks,
-    pub meter_rect: Rectangle,
+    pub volume_rect: Rectangle,
 }
 
 // Channel UI Controller
 impl ChannelUI {
-    fn new(&mut self, meter_top_left: Point, masks: ChannelUIMasks) -> Self {
+    fn new(meter_top_left: Point, masks: ChannelUIMasks) -> Self {
         Self {
             masks,
-            meter_rect: Rectangle::with_corners(meter_top_left, meter_top_left + METER_SIZE),
+            volume_rect: Rectangle::with_corners(meter_top_left, meter_top_left + METER_SIZE),
         }
     }
 
     fn meter(&mut self, value: u8) -> Rectangle {
         let fraction: f32 = (value / 255).into();
         let new_height = (fraction * METER_SIZE.height as f32).round() as u32;
-        self.meter_rect
+        self.volume_rect
             .resized_height(new_height, embedded_graphics::geometry::AnchorY::Bottom)
     }
 
@@ -84,10 +84,9 @@ impl ChannelUI {
 }
 
 fn main() -> Result<(), core::convert::Infallible> {
-    let mut display: SimulatorDisplay<BinaryColor> =
-        SimulatorDisplay::new(Size::new(WIDTH, HEIGHT));
+    let mut display: SimulatorDisplay<Gray4> = SimulatorDisplay::new(Size::new(WIDTH, HEIGHT));
 
-    let bmp: Bmp<BinaryColor> = Bmp::from_slice(include_bytes!("../static.bmp")).unwrap();
+    let bmp: Bmp<Gray4> = Bmp::from_slice(include_bytes!("../artboard.bmp")).unwrap();
 
     let image = Image::new(&bmp, Point::new(0, -1));
     image.draw(&mut display)?;
@@ -95,7 +94,7 @@ fn main() -> Result<(), core::convert::Infallible> {
     let status = Text::with_alignment(
         "USB CONNECTED",
         Point::new(H_CENTER, 13),
-        MonoTextStyle::new(&FONT_8X13_BOLD, BinaryColor::Off),
+        MonoTextStyle::new(&FONT_8X13_BOLD, Gray4::BLACK),
         Alignment::Center,
     );
 
@@ -104,15 +103,15 @@ fn main() -> Result<(), core::convert::Infallible> {
     let firmware_version = Text::with_alignment(
         "FIRMWARE VERSION 0.1a",
         Point::new(H_CENTER, 240 - 10),
-        MonoTextStyle::new(&FONT_5X7, BinaryColor::On),
+        MonoTextStyle::new(&FONT_5X7, Gray4::WHITE),
         Alignment::Center,
     );
 
     firmware_version.draw(&mut display)?;
 
-    let console_text_style = MonoTextStyleBuilder::<BinaryColor>::new()
+    let console_text_style = MonoTextStyleBuilder::<Gray4>::new()
         .font(&FONT_5X7)
-        .text_color(BinaryColor::On)
+        .text_color(Gray4::WHITE)
         .build();
 
     let console_text = Text::with_baseline(
@@ -123,6 +122,10 @@ fn main() -> Result<(), core::convert::Infallible> {
     );
 
     console_text.draw(&mut display)?;
+
+    let ui_a = ChannelUI::new(Point::new(40, 89), A_MASKS);
+
+    ui_a.
 
     let output_settings = OutputSettingsBuilder::new().scale(2).build();
     Window::new("YM2149 MIDI Interpreter", &output_settings).show_static(&display);
